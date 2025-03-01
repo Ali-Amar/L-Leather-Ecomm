@@ -25,18 +25,22 @@ const OrderConfirmation = () => {
   const error = useSelector(selectOrdersError);
 
   useEffect(() => {
-    // Clear cart after successful order
-    dispatch(clearCart());
-
-    // Get order details either from location state or fetch from API
-    const orderId = location.state?.orderId;
+    // Check URL for order ID (from our direct approach)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlOrderId = urlParams.get('id');
+    
+    // Get from location state (backup method)
+    const stateOrderId = location.state?.orderId;
+    
+    // Use whichever one is available
+    const orderId = urlOrderId || stateOrderId;
+    
     if (orderId) {
       dispatch(fetchOrderById(orderId));
-    } else if (!order) {
-      // If no order details, redirect to shop
+    } else {
       navigate('/shop');
     }
-  }, [location.state, dispatch, navigate, order]);
+  }, [dispatch, navigate, location]);
 
   const handleDownloadReceipt = async () => {
     if (!order?._id) return;

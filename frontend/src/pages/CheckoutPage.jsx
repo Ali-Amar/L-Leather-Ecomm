@@ -44,61 +44,55 @@ const CheckoutPage = () => {
     }
   }, [invalidItems, navigate]);
   
-  const handleCheckout = async (orderData) => {
-    console.log('CheckoutPage - Starting checkout process:', orderData);
+  // Replace your entire handleCheckout function with this simpler version
+  const handleCheckout = (orderData) => {
+    // Set processing state
     setIsProcessing(true);
-  
-    try {
-      const formattedOrderData = {
-        items: cartItems.map(item => ({
-          product: item.product,
-          quantity: item.quantity,
-          color: item.color,
-          price: item.price,
-          name: item.name,
-          image: item.image
-        })),
-        shippingAddress: orderData.shippingAddress,
-        paymentMethod: orderData.paymentMethod,
-        subtotal: cartTotal,
-        shippingFee: orderData.shippingFee,
-        total: cartTotal + orderData.shippingFee
-      };
-  
-      console.log('CheckoutPage - Dispatching createOrder with:', formattedOrderData);
+    
+    // Create order data object
+    const formattedOrderData = {
+      items: cartItems.map(item => ({
+        product: typeof item.product === 'object' ? item.product._id : item.product,
+        quantity: item.quantity,
+        color: item.color,
+        price: item.price,
+        name: item.name,
+        image: item.image
+      })),
+      shippingAddress: orderData.shippingAddress,
+      paymentMethod: orderData.paymentMethod,
+      subtotal: cartTotal,
+      shippingFee: orderData.shippingFee,
+      total: cartTotal + orderData.shippingFee
+    };
+    
+    // Use the CORRECT backend URL with port 5000, not 5173
+    fetch('http://localhost:5000/api/v1/emergency-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(formattedOrderData)
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Order created successfully:', data);
       
-      const result = await dispatch(createOrder(formattedOrderData)).unwrap();
-      console.log('CheckoutPage - Order creation result:', result);
-  
-      if (!result) {
-        throw new Error('No response received from server');
-      }
-  
-      // Extract order ID safely
-      const orderId = result?.data?._id || result?._id;
-      if (!orderId) {
-        throw new Error('Invalid order ID received from server');
-      }
+      // Clear cart
+      dispatch(clearCart());
       
-      // Set navigating state and clear cart before navigation
-      setIsNavigating(true);
-      dispatch(clearCart()); 
-      
-      // Navigate to confirmation page
-      navigate('/order-confirmation', { state: { orderId } });
+      // Show success message
       toast.success('Order placed successfully!');
       
-    } catch (error) {
-      console.error('CheckoutPage - Checkout error:', error);
-      toast.error(
-        error?.message || 
-        'Failed to process order. Please try again or contact support.'
-      );
-      
-      // Reset states if there's an error
-      setIsNavigating(false);
+      // Forced hard redirect
+      window.location.href = `/order-confirmation?id=${data.data._id}`;
+    })
+    .catch(error => {
+      console.error('Error:', error);
       setIsProcessing(false);
-    }
+      toast.error('Failed to create order. Please try again.');
+    });
   };
 
   // Show loading state during navigation

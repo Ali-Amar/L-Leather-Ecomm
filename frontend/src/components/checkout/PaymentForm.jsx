@@ -32,17 +32,19 @@ const PaymentFormContent = ({ onSubmit, isProcessing, orderTotal }) => {
       // Handle Cash on Delivery
       if (paymentMethod === 'cod') {
         try {
-          console.log('PaymentForm - Processing COD payment');
-          await onSubmit({
+          console.log('PaymentForm - Processing COD payment - DIRECT FLOW');
+          const result = await onSubmit({
             method: 'cod',
             status: 'pending'
           });
+          console.log('PaymentForm - COD order submission result:', result);
+          return; // Return early with successful result
         } catch (error) {
-          console.error('COD payment error:', error);
+          console.error('PaymentForm - COD payment error:', error);
           toast.error(error.message || 'Failed to process order');
-          throw error; // Re-throw to ensure the outer finally block runs
+          setIsSubmitting(false);
+          return; // Return early with error
         }
-        return;
       }
 
       // Handle Card Payment

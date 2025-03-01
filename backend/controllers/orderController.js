@@ -9,61 +9,86 @@ const logger = require('../utils/logger');
 // @desc    Create new order
 // @route   POST /api/v1/orders
 // @access  Private
-// In orderController.js
 exports.createOrder = asyncHandler(async (req, res, next) => {
-  console.log('DEBUG: Starting order creation');
-
-  const { items, shippingAddress, paymentMethod, subtotal, shippingFee, total } = req.body;
-
-  // 1. Validate each product/stock
-  for (const item of items) {
-    const productId = typeof item.product === 'object' ? item.product._id : item.product;
-    console.log(`DEBUG: Checking product ${productId}`);
+  console.log('DEBUG: Starting order creation with complete logging');
+  
+  try {
+    const { items, shippingAddress, paymentMethod, subtotal, shippingFee, total } = req.body;
     
-    const product = await Product.findById(productId);
-    if (!product) {
-      return next(new ErrorResponse(`Product not found: ${productId}`, 404));
+    console.log('DEBUG: Order data received:', {
+      itemsCount: items?.length,
+      paymentMethod,
+      subtotal,
+      total
+    });
+
+    // 1. Validate and prepare order items
+    const orderItems = [];
+    for (const item of items) {
+      const productId = typeof item.product === 'object' ? item.product._id : item.product;
+      console.log(`DEBUG: Processing product ID ${productId}`);
+      
+      const product = await Product.findById(productId);
+      if (!product) {
+        console.log(`DEBUG: Product not found: ${productId}`);
+        return res.status(404).json({
+          success: false,
+          error: `Product not found: ${productId}`
+        });
+      }
+      
+      if (product.stock < item.quantity) {
+        console.log(`DEBUG: Insufficient stock for ${product.name}: ${product.stock} available, ${item.quantity} requested`);
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient stock for ${product.name}`
+        });
+      }
+      
+      orderItems.push({
+        product: productId,
+        quantity: item.quantity,
+        color: item.color,
+        price: item.price,
+        name: item.name,
+        image: item.image
+      });
     }
+
+    // 2. Create order with proper error handling
+    console.log('DEBUG: Creating order in database');
+    const orderData = {
+      user: req.user.id,
+      items: orderItems,
+      shippingAddress,
+      paymentMethod,
+      paymentDetails: {
+        paymentStatus: paymentMethod === 'cod' ? 'pending' : 'completed'
+      },
+      subtotal,
+      shippingFee,
+      total,
+      status: 'pending'
+    };
     
-    if (product.stock < item.quantity) {
-      return next(new ErrorResponse(`Insufficient stock for ${product.name}`, 400));
-    }
+    console.log('DEBUG: Order schema prepared, calling Order.create()');
+    const order = await Order.create(orderData);
+    console.log(`DEBUG: Order created successfully with ID: ${order._id}`);
+
+    // 3. Explicitly return response to ensure completion
+    return res.status(201).json({
+      success: true,
+      data: order
+    });
+    
+  } catch (error) {
+    console.error('DEBUG: Order creation error:', error);
+    // Explicitly return error response
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Server error during order creation'
+    });
   }
-
-  // 2. Prepare the order items
-  const orderItems = items.map(item => ({
-    product: typeof item.product === 'object' ? item.product._id : item.product,
-    quantity: item.quantity,
-    color: item.color,
-    price: item.price,
-    name: item.name,
-    image: item.image
-  }));
-
-  // 3. Construct the order object
-  const orderData = {
-    user: req.user.id,
-    items: orderItems,
-    shippingAddress,
-    paymentMethod,
-    paymentDetails: {
-      paymentStatus: paymentMethod === 'cod' ? 'pending' : 'completed'
-    },
-    subtotal,
-    shippingFee,
-    total,
-    status: 'pending'
-  };
-
-  console.log('DEBUG: Saving order to database');
-  const order = await Order.create(orderData);
-  console.log(`DEBUG: Order created with ID: ${order._id}`);
-
-  // 4. Send success response to the client
-  res.status(201).json({
-    success: true,
-    data: order
-  });
 });
 
 // @desc    Get all orders
