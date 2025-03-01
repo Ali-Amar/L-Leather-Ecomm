@@ -24,20 +24,33 @@ const OrderConfirmation = () => {
   const isLoading = useSelector(selectOrdersLoading);
   const error = useSelector(selectOrdersError);
 
+
   useEffect(() => {
-    // Check URL for order ID (from our direct approach)
+    // Clear any previous error states
+    dispatch({ type: 'orders/clearErrors' });
+    
+    // Clear cart after successful order
+    dispatch(clearCart());
+
+    // Get order ID either from URL parameter or location state
     const urlParams = new URLSearchParams(window.location.search);
-    const urlOrderId = urlParams.get('id');
+    const idFromUrl = urlParams.get('id');
+    const orderId = idFromUrl || location.state?.orderId;
     
-    // Get from location state (backup method)
-    const stateOrderId = location.state?.orderId;
-    
-    // Use whichever one is available
-    const orderId = urlOrderId || stateOrderId;
+    console.log('Order confirmation - Attempting to fetch order:', orderId);
     
     if (orderId) {
-      dispatch(fetchOrderById(orderId));
-    } else {
+      // Fetch order details and log any errors
+      dispatch(fetchOrderById(orderId))
+        .unwrap()
+        .then(response => {
+          console.log('Order fetched successfully:', response);
+        })
+        .catch(error => {
+          console.error('Error fetching order:', error);
+        });
+    } else if (!order) {
+      // If no order details, redirect to shop
       navigate('/shop');
     }
   }, [dispatch, navigate, location]);

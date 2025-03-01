@@ -165,6 +165,9 @@ const orderSlice = createSlice({
       state.filters = initialState.filters;
       state.pagination.currentPage = 1;
     },
+    clearErrors: (state) => {
+      state.error = null;
+    },
     setPage: (state, action) => {
       state.pagination.currentPage = action.payload;
     }
