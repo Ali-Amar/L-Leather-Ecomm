@@ -40,10 +40,7 @@ const PaymentFormContent = ({ onSubmit, isProcessing, orderTotal }) => {
         } catch (error) {
           console.error('COD payment error:', error);
           toast.error(error.message || 'Failed to process order');
-      -   setIsSubmitting(false);   // previously only on error
-        } finally {
-      +   // Ensure we always reset on success or error
-      +   setIsSubmitting(false);
+          throw error; // Re-throw to ensure the outer finally block runs
         }
         return;
       }

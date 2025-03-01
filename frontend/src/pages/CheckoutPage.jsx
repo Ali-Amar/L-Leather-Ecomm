@@ -74,22 +74,30 @@ const CheckoutPage = () => {
         throw new Error('No response received from server');
       }
   
+      // Extract order ID safely
+      const orderId = result?.data?._id || result?._id;
+      if (!orderId) {
+        throw new Error('Invalid order ID received from server');
+      }
+      
+      // Set navigating state and clear cart before navigation
       setIsNavigating(true);
-      await dispatch(clearCart());
+      dispatch(clearCart()); 
       
       // Navigate to confirmation page
-      navigate('/order-confirmation', { 
-        state: { orderId: result.data?._id || result._id } 
-      });
+      navigate('/order-confirmation', { state: { orderId } });
       toast.success('Order placed successfully!');
       
     } catch (error) {
       console.error('CheckoutPage - Checkout error:', error);
-      setIsProcessing(false);
       toast.error(
         error?.message || 
         'Failed to process order. Please try again or contact support.'
       );
+      
+      // Reset states if there's an error
+      setIsNavigating(false);
+      setIsProcessing(false);
     }
   };
 
