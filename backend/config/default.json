@@ -1,0 +1,98 @@
+
+{
+    "app": {
+      "name": "L'ardene Leather",
+      "version": "1.0.0",
+      "description": "E-commerce platform for leather goods",
+      "url": "http://localhost:5000",
+      "frontendUrl": "http://localhost:3000",
+      "apiPrefix": "/api/v1"
+    },
+  
+    "server": {
+      "port": 5000,
+      "env": "development"
+    },
+  
+    "cors": {
+      "origin": ["http://localhost:3000"],
+      "credentials": true
+    },
+  
+    "security": {
+      "jwtSecret": "your-jwt-secret",
+      "jwtExpiresIn": "7d",
+      "bcryptSaltRounds": 10,
+      "passwordResetExpires": 3600000, 
+      "rateLimits": {
+        "window": 900000
+      }
+    },
+  
+    "database": {
+      "url": "mongodb://localhost:27017/lardene",
+      "options": {
+        "useNewUrlParser": true,
+        "useUnifiedTopology": true,
+        "useCreateIndex": true,
+        "useFindAndModify": false
+      }
+    },
+  
+    "email": {
+      "from": {
+        "name": "L'ardene Leather",
+        "email": "noreply@lardeneleather.com"
+      },
+      "smtp": {
+        "host": "smtp.mailtrap.io",
+        "port": 2525,
+        "secure": false,
+        "auth": {
+          "user": "your-smtp-username",
+          "pass": "your-smtp-password"
+        }
+      }
+    },
+  
+    "upload": {
+      "provider": "local",
+      "local": {
+        "uploadDir": "public/uploads",
+        "maxSize": 5242880, 
+        "allowedTypes": ["image/jpeg", "image/png", "image/gif"]
+      },
+      "cloudinary": {
+        "cloud_name": "your-cloud-name",
+        "api_key": "your-api-key",
+        "api_secret": "your-api-secret"
+      }
+    },
+  
+    "orders": {
+      "minimumOrderAmount": 1000,
+      "taxRate": 0.16,
+      "shippingFeeDefault": 500,
+      "freeShippingThreshold": 10000
+    },
+  
+    "payments": {
+      "currency": "PKR",
+      "methods": ["card", "cod"],
+      "stripe": {
+        "publicKey": "your-stripe-public-key",
+        "webhookSecret": "your-stripe-webhook-secret"
+      }
+    },
+  
+    "cache": {
+      "enabled": true,
+      "ttl": 3600
+    },
+  
+    "logging": {
+      "level": "info",
+      "maxFiles": 5,
+      "maxSize": 5242880 
+    }
+  }
