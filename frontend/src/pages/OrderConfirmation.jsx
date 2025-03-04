@@ -20,59 +20,74 @@ const OrderConfirmation = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
-  const order = useSelector(selectSelectedOrder);
-  const isLoading = useSelector(selectOrdersLoading);
-  const error = useSelector(selectOrdersError);
-  const [orderFetched, setOrderFetched] = useState(false);
+  const reduxOrder = useSelector(selectSelectedOrder);
+  const isReduxLoading = useSelector(selectOrdersLoading);
+  const reduxError = useSelector(selectOrdersError);
+  
+  const [order, setOrder] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     // Clear cart after successful order
     dispatch(clearCart());
 
-    // First check URL parameters for orderId (from our direct navigation approach)
+    // Get order ID from URL parameter
     const urlParams = new URLSearchParams(window.location.search);
-    const idFromUrl = urlParams.get('id');
+    const orderId = urlParams.get('id');
     
-    // Then check location state (for normal navigation)
-    const locationOrderId = location.state?.orderId;
-    
-    // Use whichever ID is available
-    const orderId = idFromUrl || locationOrderId;
-    
-    console.log('OrderConfirmation - Attempting to fetch order with ID:', orderId);
-    
-    if (orderId) {
-      dispatch(fetchOrderById(orderId))
-        .unwrap()
-        .then(response => {
-          console.log('Order fetched successfully:', response);
-          setOrderFetched(true);
-        })
-        .catch(error => {
-          console.error('Error fetching order:', error);
-          toast.error('Unable to fetch order details');
-        });
-    } else if (!order) {
-      // If no order details, redirect to shop
-      console.log('No order ID found, redirecting to shop');
-      toast.error('No order details found');
-      navigate('/shop');
+    if (!orderId) {
+      setIsLoading(false);
+      setError('No order ID found');
+      console.log('No order ID found in URL');
+      return;
     }
-  }, [location, dispatch, navigate]);
+
+    console.log('Fetching order with ID:', orderId);
+    
+    // First try to load directly from the API
+    setIsLoading(true);
+    
+    // Direct API call (bypassing Redux)
+    api.get(`/orders/${orderId}`)
+      .then(response => {
+        console.log('Direct API order fetch successful:', response.data);
+        setOrder(response.data.data || response.data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error('Direct API order fetch failed:', err);
+        
+        // Fall back to Redux approach
+        console.log('Trying Redux fetch as fallback...');
+        dispatch(fetchOrderById(orderId))
+          .unwrap()
+          .then(response => {
+            console.log('Redux order fetch successful:', response);
+            setOrder(response.data || response);
+            setIsLoading(false);
+          })
+          .catch(reduxErr => {
+            console.error('Redux order fetch also failed:', reduxErr);
+            setError('Unable to fetch order details');
+            setIsLoading(false);
+            toast.error('Failed to load order details');
+          });
+      });
+  }, [dispatch, navigate, location]);
 
   const handleDownloadReceipt = async () => {
-    const orderId = order?._id || order?.data?._id;
-    if (!orderId) return;
+    if (!order?._id) return;
 
     try {
-      const response = await api.get(`/orders/${orderId}/receipt`, { 
+      const response = await api.get(`/orders/${order._id}/receipt`, { 
         responseType: 'blob' 
       });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `order-${orderId}-receipt.pdf`);
+      link.setAttribute('download', `order-${order._id}-receipt.pdf`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
@@ -84,10 +99,7 @@ const OrderConfirmation = () => {
     }
   };
 
-  // Extract order data, handling different possible structures
-  const orderData = order?.data || order;
-
-  if (isLoading || (!orderData && !error && !orderFetched)) {
+  if (isLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
@@ -103,14 +115,14 @@ const OrderConfirmation = () => {
       <div className="min-h-[60vh] flex flex-col items-center justify-center">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
         <p className="text-red-500 mb-4">{error}</p>
-        <Button variant="outline" onClick={() => navigate('/orders')}>
-          View Orders
+        <Button variant="outline" onClick={() => navigate('/shop')}>
+          Continue Shopping
         </Button>
       </div>
     );
   }
 
-  if (!orderData || !orderData._id) {
+  if (!order || !order._id) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center">
         <Package className="w-12 h-12 text-gray-400 mb-4" />
@@ -132,7 +144,7 @@ const OrderConfirmation = () => {
     shippingFee = 0, 
     total = 0, 
     createdAt = new Date()
-  } = orderData;
+  } = order;
 
   const orderDate = new Date(createdAt).toLocaleDateString('en-US', {
     weekday: 'long',
@@ -172,7 +184,7 @@ const OrderConfirmation = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-gray-500 mb-1">Order Number</p>
-              <p className="font-medium"># {orderData._id}</p>
+              <p className="font-medium"># {order._id}</p>
             </div>
             <div>
               <p className="text-gray-500 mb-1">Date & Time</p>
