@@ -412,22 +412,13 @@ exports.generateReceipt = asyncHandler(async (req, res, next) => {
       return next(new ErrorResponse('Not authorized to access this receipt', 401));
     }
 
-    // Create a document
-    const doc = new PDFDocument();
-    const buffers = [];
-    
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=order-${order._id}.pdf`);
-    
-    // Collect PDF data in buffers
-    doc.on('data', buffers.push.bind(buffers));
-    
-    // Handle end of document
-    doc.on('end', () => {
-      const pdfData = Buffer.concat(buffers);
-      res.send(pdfData);
-    });
+
+    // Create a document and pipe it directly to the response
+    const doc = new PDFDocument();
+    doc.pipe(res);
 
     // Set up the PDF document
     doc.fontSize(25).text('L\'ardene Leather', { align: 'center' });
@@ -508,7 +499,7 @@ exports.generateReceipt = asyncHandler(async (req, res, next) => {
     // Footer
     doc.fontSize(10).text('Thank you for shopping with L\'ardene Leather', 50, 700, { align: 'center' });
 
-    // Finalize the PDF and end the stream
+    // Finalize the PDF
     doc.end();
     
   } catch (err) {

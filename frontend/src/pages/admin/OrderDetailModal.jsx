@@ -9,30 +9,57 @@ import api from '../../utils/api';
 const OrderDetailModal = ({ order, isOpen, onClose, onStatusUpdate, isLoading }) => {
   if (!isOpen || !order) return null;
 
-  const handleDownloadReceipt = async () => {
-    try {
-      toast.loading('Preparing receipt...');
-      
-      const response = await api.get(`/orders/${order._id}/receipt`, { 
-        responseType: 'blob' 
-      });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `order-${order._id}-receipt.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      
-      toast.dismiss();
-      toast.success('Receipt downloaded successfully');
-    } catch (error) {
-      console.error('Download receipt error:', error);
-      toast.dismiss();
-      toast.error('Failed to download receipt');
+  // Replace the receipt download function in your frontend components
+
+const handleDownloadReceipt = async () => {
+  try {
+    toast.loading('Preparing receipt...', { id: 'receipt-download' });
+    
+    // Use XMLHttpRequest instead of axios for better binary data handling
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/orders/${order._id}/receipt`, true);
+    xhr.responseType = 'blob';
+    
+    // Set authorization header
+    const token = localStorage.getItem('token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
-  };
+    
+    xhr.onload = function() {
+      if (this.status === 200) {
+        // Create blob and download
+        const blob = new Blob([this.response], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `order-${order._id}-receipt.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+        
+        toast.dismiss('receipt-download');
+        toast.success('Receipt downloaded successfully');
+      } else {
+        console.error('Download failed with status:', this.status);
+        toast.dismiss('receipt-download');
+        toast.error('Failed to download receipt');
+      }
+    };
+    
+    xhr.onerror = function() {
+      console.error('XHR error during download');
+      toast.dismiss('receipt-download');
+      toast.error('Network error while downloading receipt');
+    };
+    
+    xhr.send();
+  } catch (error) {
+    console.error('Receipt download error:', error);
+    toast.dismiss('receipt-download');
+    toast.error('Failed to download receipt');
+  }
+};
   
   const updateStatus = (newStatus) => {
     if (order.status === newStatus) return;
