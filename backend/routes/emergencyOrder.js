@@ -142,4 +142,136 @@ router.get('/', protect, (req, res) => {
   }
 });
 
+router.put('/:id/status', protect, async (req, res) => {
+  try {
+    console.log('EMERGENCY STATUS UPDATE: Starting for order ID:', req.params.id);
+    
+    // Basic validation
+    if (!req.params.id || !req.body.status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order ID and status are required'
+      });
+    }
+    
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins can update order status'
+      });
+    }
+    
+    // Find and update the order
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+    
+    // Update the status directly
+    console.log(`EMERGENCY STATUS UPDATE: Changing order ${req.params.id} status from ${order.status} to ${req.body.status}`);
+    order.status = req.body.status;
+    
+    // Save the updated order
+    await order.save();
+    
+    console.log('EMERGENCY STATUS UPDATE: Successfully updated order status');
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Order status updated successfully',
+      data: order
+    });
+  } catch (error) {
+    console.error('EMERGENCY STATUS UPDATE: Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Server error'
+    });
+  }
+});
+
+// Emergency route for direct admin updates to any collection
+router.post('/admin/direct-update', protect, async (req, res) => {
+  try {
+    // Only allow admins
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins can use direct updates'
+      });
+    }
+    
+    const { collection, documentId, update } = req.body;
+    
+    // Validate inputs
+    if (!collection || !documentId || !update) {
+      return res.status(400).json({
+        success: false,
+        error: 'Collection name, document ID, and update object are required'
+      });
+    }
+    
+    // Safety check for allowed collections
+    const allowedCollections = ['orders', 'products', 'categories'];
+    if (!allowedCollections.includes(collection)) {
+      return res.status(400).json({
+        success: false,
+        error: `Collection ${collection} is not allowed for direct updates`
+      });
+    }
+    
+    // Get the collection model
+    let Model;
+    switch (collection) {
+      case 'orders':
+        Model = require('../models/Order');
+        break;
+      case 'products':
+        Model = require('../models/Product');
+        break;
+      case 'categories':
+        Model = require('../models/Category');
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid collection'
+        });
+    }
+    
+    // Perform the update
+    console.log(`DIRECT UPDATE: Updating ${collection} document ${documentId}`);
+    const result = await Model.findByIdAndUpdate(
+      documentId,
+      update,
+      { new: true, runValidators: true }
+    );
+    
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: `Document not found in ${collection}`
+      });
+    }
+    
+    console.log('DIRECT UPDATE: Successfully updated document');
+    
+    return res.status(200).json({
+      success: true,
+      message: `${collection} document updated successfully`,
+      data: result
+    });
+  } catch (error) {
+    console.error('DIRECT UPDATE: Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Server error'
+    });
+  }
+});
+
 module.exports = router;

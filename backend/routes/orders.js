@@ -7,7 +7,8 @@ const {
   getOrder,
   updateOrderStatus,
   updatePaymentStatus,
-  cancelOrder
+  cancelOrder,
+  generateReceipt
 } = require('../controllers/orderController');
 
 const { protect, authorize } = require('../middleware/auth');
@@ -92,5 +93,6 @@ router.route('/:id').get(protect, getOrder);
 router.route('/:id/status').put(protect, authorize('admin'), updateOrderStatusValidation, validate, updateOrderStatus);
 router.route('/:id/payment').put(protect, authorize('admin'), updatePaymentStatusValidation, validate, updatePaymentStatus);
 router.route('/:id/cancel').put(protect, cancelOrder);
+router.route('/:id/receipt').get(protect, generateReceipt);
 
 module.exports = router;

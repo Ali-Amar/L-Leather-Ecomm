@@ -5,6 +5,7 @@ const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
+const PDFDocument = require('pdfkit');
 
 // @desc    Create new order
 // @route   POST /api/v1/orders
@@ -189,66 +190,91 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/orders/:id/status
 // @access  Private/Admin
 exports.updateOrderStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body;
-  const order = await Order.findById(req.params.id);
-
-  if (!order) {
-    return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, 404));
-  }
-
-  // Validate status transition
-  const validTransitions = {
-    pending: ['processing', 'cancelled'],
-    processing: ['shipped', 'cancelled'],
-    shipped: ['delivered', 'returned'],
-    delivered: ['returned'],
-    cancelled: [],
-    returned: []
-  };
-
-  if (!validTransitions[order.status].includes(status)) {
-    return next(
-      new ErrorResponse(
-        `Invalid status transition from ${order.status} to ${status}`,
-        400
-      )
-    );
-  }
-
-  // Update tracking info if order is being shipped
-  if (status === 'shipped') {
-    if (!req.body.trackingInfo) {
-      return next(new ErrorResponse('Tracking information is required for shipped orders', 400));
-    }
-    order.trackingInfo = req.body.trackingInfo;
-  }
-
-  // Handle inventory for cancelled/returned orders
-  if (['cancelled', 'returned'].includes(status) && 
-      !['cancelled', 'returned'].includes(order.status)) {
-    await Promise.all(
-      order.items.map(async (item) => {
-        await Product.findByIdAndUpdate(item.product, {
-          $inc: { stock: item.quantity }
-        });
-      })
-    );
-  }
-
-  order.status = status;
-  await order.save();
-
-  // Send status update email to customer
   try {
-    await emailService.sendOrderStatusUpdate(order, await order.populate('user'));
-  } catch (err) {
-    logger.error('Error sending order status update email', err);
-  }
+    console.log(`Updating order status: Order ID ${req.params.id}, New status: ${req.body.status}`);
+    
+    const { status } = req.body;
+    const order = await Order.findById(req.params.id);
 
-  res.status(200).json({
-    success: true,
-    data: order
-  });
+    if (!order) {
+      console.log(`Order not found with id: ${req.params.id}`);
+      return res.status(404).json({
+        success: false,
+        error: `Order not found with id of ${req.params.id}`
+      });
+    }
+
+    console.log(`Current order status: ${order.status}, Requested status: ${status}`);
+
+    // MODIFIED: Relaxed transition validation for admin users
+    if (req.user.role === 'admin') {
+      // Allow admins to set any status
+      console.log('Admin user - allowing any status transition');
+    } else {
+      // For non-admin users, enforce stricter rules
+      const validTransitions = {
+        pending: ['processing', 'cancelled'],
+        processing: ['shipped', 'cancelled'],
+        shipped: ['delivered', 'returned'],
+        delivered: ['returned'],
+        cancelled: [],
+        returned: []
+      };
+
+      if (!validTransitions[order.status]?.includes(status)) {
+        console.log(`Invalid status transition from ${order.status} to ${status}`);
+        return res.status(400).json({
+          success: false,
+          error: `Invalid status transition from ${order.status} to ${status}`
+        });
+      }
+    }
+
+    // MODIFIED: Make tracking info optional for shipping status
+    if (status === 'shipped' && req.body.trackingInfo) {
+      console.log('Adding tracking info to order');
+      order.trackingInfo = req.body.trackingInfo;
+    }
+
+    // Handle inventory for cancelled/returned orders
+    if (['cancelled', 'returned'].includes(status) && 
+        !['cancelled', 'returned'].includes(order.status)) {
+      console.log('Restoring inventory for cancelled/returned order');
+      await Promise.all(
+        order.items.map(async (item) => {
+          await Product.findByIdAndUpdate(item.product, {
+            $inc: { stock: item.quantity }
+          });
+        })
+      );
+    }
+
+    // Update the status
+    order.status = status;
+    await order.save();
+    console.log(`Order status updated successfully to: ${status}`);
+
+    // Send status update email to customer (in background, don't wait)
+    try {
+      emailService.sendOrderStatusUpdate(order, await order.populate('user'))
+        .catch(err => {
+          console.error('Error sending order status update email', err);
+        });
+    } catch (err) {
+      console.error('Error preparing email notification', err);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error in updateOrderStatus:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Server error updating order status'
+    });
+  }
 });
 
 // @desc    Get my orders
@@ -364,4 +390,129 @@ exports.cancelOrder = asyncHandler(async (req, res, next) => {
     success: true,
     data: order
   });
+});
+
+// @desc    Generate and download order receipt
+// @route   GET /api/v1/orders/:id/receipt
+// @access  Private
+exports.generateReceipt = asyncHandler(async (req, res, next) => {
+  try {
+    // Get order by ID
+    const order = await Order.findById(req.params.id).populate({
+      path: 'user',
+      select: 'firstName lastName email phone'
+    });
+
+    if (!order) {
+      return next(new ErrorResponse(`Order not found with id of ${req.params.id}`, 404));
+    }
+
+    // Check if user is owner or admin
+    if (order.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+      return next(new ErrorResponse('Not authorized to access this receipt', 401));
+    }
+
+    // Create a document
+    const doc = new PDFDocument();
+    const buffers = [];
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=order-${order._id}.pdf`);
+    
+    // Collect PDF data in buffers
+    doc.on('data', buffers.push.bind(buffers));
+    
+    // Handle end of document
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      res.send(pdfData);
+    });
+
+    // Set up the PDF document
+    doc.fontSize(25).text('L\'ardene Leather', { align: 'center' });
+    doc.fontSize(15).text('Order Receipt', { align: 'center' });
+    doc.moveDown();
+    
+    // Order details
+    doc.fontSize(12).text(`Order #: ${order._id}`);
+    doc.fontSize(10).text(`Date: ${new Date(order.createdAt).toLocaleString()}`);
+    doc.fontSize(10).text(`Payment Method: ${order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Card Payment'}`);
+    doc.fontSize(10).text(`Status: ${order.status}`);
+    doc.moveDown();
+    
+    // Customer info
+    doc.fontSize(12).text('Customer Information:');
+    doc.fontSize(10).text(`Name: ${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`);
+    doc.fontSize(10).text(`Email: ${order.shippingAddress.email}`);
+    doc.fontSize(10).text(`Phone: ${order.shippingAddress.phone}`);
+    doc.moveDown();
+    
+    // Shipping address
+    doc.fontSize(12).text('Shipping Address:');
+    doc.fontSize(10).text(order.shippingAddress.address);
+    doc.fontSize(10).text(`${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}`);
+    doc.moveDown();
+    
+    // Items
+    doc.fontSize(12).text('Order Items:');
+    doc.moveDown(0.5);
+    
+    // Table header
+    let y = doc.y;
+    doc.fontSize(10);
+    doc.text('Item', 50, y);
+    doc.text('Color', 250, y);
+    doc.text('Qty', 320, y);
+    doc.text('Price', 370, y);
+    doc.text('Total', 450, y);
+    
+    // Separator line
+    y += 15;
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+    y += 10;
+    
+    // Items
+    order.items.forEach(item => {
+      doc.fontSize(10);
+      doc.text(item.name, 50, y, { width: 190 });
+      doc.text(item.color, 250, y);
+      doc.text(item.quantity.toString(), 320, y);
+      doc.text(`$${item.price.toFixed(2)}`, 370, y);
+      doc.text(`$${(item.price * item.quantity).toFixed(2)}`, 450, y);
+      y += 25;
+      
+      // Add a new page if we run out of space
+      if (y > 700) {
+        doc.addPage();
+        y = 50;
+      }
+    });
+    
+    // Separator line
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+    y += 15;
+    
+    // Order summary
+    doc.fontSize(10).text('Subtotal:', 350, y);
+    doc.text(`$${order.subtotal.toFixed(2)}`, 450, y);
+    y += 15;
+    
+    doc.fontSize(10).text('Shipping:', 350, y);
+    doc.text(`$${order.shippingFee.toFixed(2)}`, 450, y);
+    y += 15;
+    
+    doc.fontSize(12).text('Total:', 350, y);
+    doc.fontSize(12).text(`$${order.total.toFixed(2)}`, 450, y);
+    
+    // Footer
+    doc.fontSize(10).text('Thank you for shopping with L\'ardene Leather', 50, 700, { align: 'center' });
+
+    // Finalize the PDF and end the stream
+    doc.end();
+    
+  } catch (err) {
+    console.error('Error generating receipt:', err);
+    return next(new ErrorResponse('Error generating receipt', 500));
+  }
 });
