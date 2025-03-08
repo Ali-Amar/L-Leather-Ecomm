@@ -103,8 +103,8 @@ const Contact = () => {
               </div>
               <div>
                 <h3 className="font-medium mb-1">Email</h3>
-                <p className="text-gray-600">support@lardeneleather.com</p>
-                <p className="text-gray-600">sales@lardeneleather.com</p>
+                <p className="text-gray-600">lardeneleather@gmail.com</p>
+                <p className="text-gray-600">lardeneleather@gmail.com</p>
               </div>
             </div>
 
