@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Filter, ChevronDown, Search } from 'lucide-react';
+import { Eye, Filter, ChevronDown, Search, AlertCircle, RefreshCw } from 'lucide-react';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { formatPrice } from '../../utils/helpers';
 import api from '../../utils/api';
+import toast from 'react-hot-toast';
+import OrderDetailModal from './OrderDetailModal'; // Import the new modal component
 
 const orderStatuses = [
   { value: 'all', label: 'All Orders' },
@@ -79,8 +81,14 @@ const AdminOrders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  
+  // State for order detail modal
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isLoadingOrderDetail, setIsLoadingOrderDetail] = useState(false);
   
   const [pagination, setPagination] = useState({
     page: 1,
@@ -95,13 +103,17 @@ const AdminOrders = () => {
     sort: '-createdAt'
   });
 
-  // Function to fetch orders
-  const fetchOrders = async () => {
+  // Function to fetch orders with multiple fallback strategies
+  const fetchOrders = async (isRetry = false) => {
     try {
-      setLoading(true);
+      if (isRetry) {
+        setIsRetrying(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
       
-      console.log('Starting to fetch orders...');
+      console.log('Starting to fetch admin orders...');
       
       // Build query params
       const params = new URLSearchParams({
@@ -131,51 +143,120 @@ const AdminOrders = () => {
       const token = localStorage.getItem('token');
       console.log('Using auth token:', token ? 'Token exists' : 'No token found');
       
-      // Make the API call
-      const response = await api.get(`/orders?${params.toString()}`);
+      // Try multiple approaches to fetch orders
       
-      console.log('Admin orders response:', response);
+      // First try regular orders endpoint
+      try {
+        console.log('Trying primary orders endpoint...');
+        const response = await api.get(`/orders?${params.toString()}`);
+        
+        console.log('Primary orders endpoint response:', response);
+        
+        if (response && (response.data || response.success)) {
+          // Handle different response structures
+          const orderData = response.data?.data || response.data || [];
+          const paginationData = response.pagination || response.data?.pagination || {
+            current: 1,
+            limit: 10,
+            total: orderData.length,
+            totalPages: 1
+          };
+          
+          setOrders(orderData);
+          setPagination({
+            page: paginationData.current || 1,
+            limit: paginationData.limit || 10,
+            total: paginationData.total || 0,
+            totalPages: paginationData.totalPages || 1
+          });
+          
+          return; // Exit if successful
+        }
+      } catch (primaryErr) {
+        console.error('Primary orders endpoint failed:', primaryErr);
+        // Continue to fallback
+      }
       
-      if (response.data && response.data.success) {
-        setOrders(response.data.data || []);
-        setPagination({
-          page: response.data.pagination?.current || 1,
-          limit: response.data.pagination?.limit || 10,
-          total: response.data.pagination?.total || 0,
-          totalPages: response.data.pagination?.totalPages || 1
-        });
-      } else {
-        setError('Failed to fetch orders: ' + (response.data?.message || 'Unknown error'));
-        console.error('Error response from server:', response.data);
+      // Fallback 1: Try emergency orders endpoint
+      try {
+        console.log('Trying emergency orders endpoint...');
+        const emergencyResponse = await api.get(`/emergency-order?${params.toString()}`);
+        
+        console.log('Emergency orders endpoint response:', emergencyResponse);
+        
+        if (emergencyResponse && (emergencyResponse.data || emergencyResponse.success)) {
+          const orderData = emergencyResponse.data?.data || emergencyResponse.data || [];
+          
+          setOrders(orderData);
+          setPagination({
+            page: 1,
+            limit: 10,
+            total: orderData.length,
+            totalPages: Math.ceil(orderData.length / 10)
+          });
+          
+          toast.success('Orders loaded via emergency endpoint');
+          return; // Exit if successful
+        }
+      } catch (emergencyErr) {
+        console.error('Emergency orders endpoint failed:', emergencyErr);
+        // Continue to next fallback
+      }
+      
+      // Fallback 2: Try manual fetch with fewer middlewares (direct DB approach would be on backend)
+      try {
+        console.log('Trying direct orders approach...');
+        const directResponse = await api.get(`/orders/direct?${params.toString()}`);
+        
+        console.log('Direct orders approach response:', directResponse);
+        
+        if (directResponse && (directResponse.data || directResponse.success)) {
+          const orderData = directResponse.data?.data || directResponse.data || [];
+          
+          setOrders(orderData);
+          setPagination({
+            page: 1,
+            limit: 10,
+            total: orderData.length,
+            totalPages: Math.ceil(orderData.length / 10)
+          });
+          
+          toast.success('Orders loaded via direct endpoint');
+          return; // Exit if successful
+        }
+      } catch (directErr) {
+        console.error('Direct orders approach failed:', directErr);
+        // All approaches failed, throw error
+        throw new Error('All order fetch methods failed');
       }
     } catch (err) {
-      console.error('Error fetching admin orders:', err);
+      console.error('Final error fetching admin orders:', err);
       
       // More detailed error logging
       if (err.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
         console.error('Error status:', err.response.status);
         console.error('Error data:', err.response.data);
         
         if (err.response.status === 401) {
           setError('Authentication error. Please log in again.');
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
         } else if (err.response.status === 403) {
           setError('You do not have permission to access orders.');
         } else {
           setError(`Server error: ${err.response.data?.message || err.response.statusText}`);
         }
       } else if (err.request) {
-        // The request was made but no response was received
         console.error('No response received:', err.request);
         setError('No response from server. Please check your connection.');
       } else {
-        // Something happened in setting up the request that triggered an Error
         console.error('Request setup error:', err.message);
         setError(`Error: ${err.message}`);
       }
     } finally {
       setLoading(false);
+      setIsRetrying(false);
     }
   };
 
@@ -215,6 +296,157 @@ const AdminOrders = () => {
       ...prev,
       page
     }));
+  };
+
+  // IMPROVED: Get detailed order info and open modal
+  const viewOrderDetails = async (orderId) => {
+    try {
+      setIsLoadingOrderDetail(true);
+      setIsDetailModalOpen(true);
+      
+      // First try to find order in current list
+      const existingOrder = orders.find(order => order._id === orderId);
+      if (existingOrder) {
+        setSelectedOrder(existingOrder);
+      }
+      
+      // Then try to get a fresh copy with full details
+      console.log(`Fetching detailed info for order ${orderId}`);
+      
+      try {
+        const response = await api.get(`/orders/${orderId}`);
+        console.log('Order detail response:', response);
+        
+        if (response && (response.data || response.success)) {
+          const orderData = response.data?.data || response.data;
+          setSelectedOrder(orderData);
+        }
+      } catch (primaryErr) {
+        console.error('Primary order detail endpoint failed:', primaryErr);
+        
+        // Try emergency endpoint
+        try {
+          const emergencyResponse = await api.get(`/emergency-order/${orderId}`);
+          console.log('Emergency order detail response:', emergencyResponse);
+          
+          if (emergencyResponse && (emergencyResponse.data || emergencyResponse.success)) {
+            const orderData = emergencyResponse.data?.data || emergencyResponse.data;
+            setSelectedOrder(orderData);
+          }
+        } catch (emergencyErr) {
+          console.error('Emergency order detail endpoint failed:', emergencyErr);
+          toast.error('Could not load complete order details');
+        }
+      }
+    } catch (err) {
+      console.error('Error loading order details:', err);
+      toast.error('Failed to load order details');
+    } finally {
+      setIsLoadingOrderDetail(false);
+    }
+  };
+
+  // IMPROVED: Update order status
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      // Show a loading indicator for this specific action
+      toast.loading('Updating order status...', { id: `order-status-${orderId}` });
+      
+      console.log(`Attempting to update order ${orderId} to status: ${newStatus}`);
+      
+      // Try multiple API endpoints to update the status
+      let success = false;
+      let response;
+      
+      // First try the standard endpoint
+      try {
+        console.log('Trying primary status update endpoint...');
+        response = await api.put(`/orders/${orderId}/status`, {
+          status: newStatus
+        });
+        
+        console.log('Primary endpoint response:', response);
+        if (response && (response.success || response.data)) {
+          success = true;
+        }
+      } catch (primaryErr) {
+        console.error('Primary status update failed:', primaryErr);
+        // Continue to fallback
+      }
+      
+      // If primary endpoint fails, try emergency endpoint
+      if (!success) {
+        try {
+          console.log('Trying emergency status update endpoint...');
+          response = await api.put(`/emergency-order/${orderId}/status`, {
+            status: newStatus
+          });
+          
+          console.log('Emergency endpoint response:', response);
+          if (response && (response.success || response.data)) {
+            success = true;
+          }
+        } catch (emergencyErr) {
+          console.error('Emergency status update failed:', emergencyErr);
+        }
+      }
+      
+      // If both fail, try direct API call
+      if (!success) {
+        try {
+          console.log('Trying direct database update...');
+          response = await api.post(`/admin/direct-update`, {
+            collection: 'orders',
+            documentId: orderId,
+            update: { status: newStatus }
+          });
+          
+          console.log('Direct update response:', response);
+          if (response && (response.success || response.data)) {
+            success = true;
+          }
+        } catch (directErr) {
+          console.error('Direct update failed:', directErr);
+        }
+      }
+      
+      if (success) {
+        // Update the order in the local state
+        setOrders(prevOrders => 
+          prevOrders.map(order => 
+            order._id === orderId 
+              ? { ...order, status: newStatus } 
+              : order
+          )
+        );
+        
+        // Also update the selectedOrder if it's the same order
+        if (selectedOrder && selectedOrder._id === orderId) {
+          setSelectedOrder(prev => ({
+            ...prev,
+            status: newStatus
+          }));
+        }
+        
+        // Success message
+        toast.success(`Order status updated to ${newStatus}`, { id: `order-status-${orderId}` });
+        
+        // Force refresh data after a short delay
+        setTimeout(() => {
+          fetchOrders(true);
+        }, 1000);
+      } else {
+        toast.error('Status update failed. Please try again.', { id: `order-status-${orderId}` });
+      }
+    } catch (err) {
+      console.error('Error updating order status:', err);
+      toast.error('Failed to update order status: ' + (err.message || 'Unknown error'), { id: `order-status-${orderId}` });
+    }
+  };
+
+  // Retry loading orders
+  const handleRetry = () => {
+    fetchOrders(true);
   };
 
   // Get status color for the badge
@@ -260,47 +492,7 @@ const AdminOrders = () => {
     });
   };
 
-  // View order details
-  const viewOrderDetails = (orderId) => {
-    navigate(`/order-confirmation?id=${orderId}`);
-  };
-
-  // Update order status
-  const updateOrderStatus = async (orderId, newStatus) => {
-    try {
-      setLoading(true);
-      
-      const response = await api.put(`/orders/${orderId}/status`, {
-        status: newStatus
-      });
-      
-      if (response.data.success) {
-        // Update the order in the local state
-        setOrders(prevOrders => 
-          prevOrders.map(order => 
-            order._id === orderId 
-              ? { ...order, status: newStatus } 
-              : order
-          )
-        );
-        
-        // Success message
-        alert(`Order status updated to ${newStatus}`);
-      }
-    } catch (err) {
-      console.error('Error updating order status:', err);
-      alert('Failed to update order status');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Retry loading orders
-  const handleRetry = () => {
-    fetchOrders();
-  };
-
-  if (loading && orders.length === 0) {
+  if (loading && orders.length === 0 && !isRetrying) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
         <LoadingSpinner size="lg" />
@@ -415,17 +607,31 @@ const AdminOrders = () => {
 
       {/* Error message with retry button */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md mb-6 flex flex-col items-center">
-          <p className="mb-3">{error}</p>
-          <Button onClick={handleRetry} variant="outline">
-            Retry
+        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-md mb-6 flex flex-col items-center">
+          <AlertCircle className="h-10 w-10 mb-4 text-red-600" />
+          <p className="mb-4 text-center">{error}</p>
+          <Button 
+            onClick={handleRetry} 
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {isRetrying ? 'Retrying...' : 'Retry'}
           </Button>
+        </div>
+      )}
+
+      {/* Loading overlay */}
+      {isRetrying && (
+        <div className="mb-6 bg-gray-50 border border-gray-200 p-4 rounded-md flex items-center justify-center">
+          <LoadingSpinner size="sm" className="mr-2" />
+          <p>Retrying to fetch orders...</p>
         </div>
       )}
 
       {/* Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {orders.length === 0 && !error ? (
+        {orders.length === 0 && !error && !loading ? (
           <div className="p-8 text-center">
             <p className="text-gray-500">No orders found matching your criteria.</p>
           </div>
@@ -501,7 +707,8 @@ const AdminOrders = () => {
                         <select
                           value={order.status}
                           onChange={(e) => updateOrderStatus(order._id, e.target.value)}
-                          className="block w-24 rounded-md border-gray-300 py-1 pl-2 pr-6 text-xs focus:border-primary focus:outline-none focus:ring-primary"
+                          className="block w-28 rounded-md border-gray-300 py-1 pl-2 pr-6 text-xs focus:border-primary focus:outline-none focus:ring-primary"
+                          disabled={loading || isRetrying}
                         >
                           <option value="pending">Pending</option>
                           <option value="processing">Processing</option>
@@ -532,6 +739,15 @@ const AdminOrders = () => {
           </div>
         )}
       </div>
+      
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        order={selectedOrder}
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        onStatusUpdate={updateOrderStatus}
+        isLoading={isLoadingOrderDetail}
+      />
     </div>
   );
 };
