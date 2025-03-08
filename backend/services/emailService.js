@@ -8,7 +8,7 @@ class EmailService {
       port: process.env.SMTP_PORT,
       secure: process.env.SMTP_SECURE === 'true',
       auth: {
-        user: process.env.SMTP_USER,
+        user: process.env.SMTP_EMAIL,
         pass: process.env.SMTP_PASSWORD
       }
     });
