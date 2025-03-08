@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
-import { loginUser, selectAuthLoading, selectAuthError } from '../../features/auth/authSlice';
+import { 
+  loginUser, 
+  resendVerificationEmail,
+  selectAuthLoading, 
+  selectAuthError 
+} from '../../features/auth/authSlice';
 import Button from '../common/Button';
 import Input from '../common/Input';
 
@@ -20,6 +25,7 @@ const Login = () => {
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -71,15 +77,57 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setErrors({
-        submit: error?.message || 'Invalid credentials'
-      });
+      
+      // Check if this is a verification error
+      if (error?.message?.includes('verify your email')) {
+        setNeedsVerification(true);
+      } else {
+        setErrors({
+          submit: error?.message || 'Invalid credentials'
+        });
+      }
     }
   };
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
+
+  if (needsVerification) {
+    return (
+      <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Email Not Verified</h2>
+            <p className="text-gray-600 mb-6">
+              Your email address <span className="font-medium">{formData.email}</span> has not been verified yet. 
+              Please check your inbox for the verification link or request a new one.
+            </p>
+            <Button 
+              onClick={() => dispatch(resendVerificationEmail({ email: formData.email }))}
+              fullWidth
+              disabled={isLoading}
+            >
+              {isLoading ? 'Sending...' : 'Resend Verification Email'}
+            </Button>
+            <div className="mt-4">
+              <button 
+                onClick={() => setNeedsVerification(false)} 
+                className="text-primary hover:underline"
+              >
+                Try again with a different email
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 py-12">
@@ -155,9 +203,15 @@ const Login = () => {
             </Link>
           </div>
 
-          {error && (
+          {error && !needsVerification && (
             <div className="text-sm text-red-500 text-center">
               {error}
+            </div>
+          )}
+
+          {errors.submit && (
+            <div className="text-sm text-red-500 text-center">
+              {errors.submit}
             </div>
           )}
 

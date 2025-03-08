@@ -10,7 +10,8 @@ const user = localStorage.getItem('user')
 const initialState = {
   user: user,
   loading: false,
-  error: null
+  error: null,
+  pendingRegistration: null
 };
 
 export const loginUser = createAsyncThunk(
@@ -29,6 +30,28 @@ export const registerUser = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       return await authService.register(userData);
+    } catch (error) {
+      return rejectWithValue(error);
+    }
+  }
+);
+
+export const verifyEmail = createAsyncThunk(
+  'auth/verifyEmail',
+  async (token, { rejectWithValue }) => {
+    try {
+      return await authService.verifyEmail(token);
+    } catch (error) {
+      return rejectWithValue(error);
+    }
+  }
+);
+
+export const resendVerificationEmail = createAsyncThunk(
+  'auth/resendVerification',
+  async (email, { rejectWithValue }) => {
+    try {
+      return await authService.resendVerification(email);
     } catch (error) {
       return rejectWithValue(error);
     }
@@ -78,6 +101,7 @@ const authSlice = createSlice({
       state.user = null;
       state.loading = false;
       state.error = null;
+      state.pendingRegistration = null;
     },
     clearError: (state) => {
       state.error = null;
@@ -93,6 +117,7 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
+        state.pendingRegistration = null;
         // Don't need to handle token storage here as it's done in authService
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -109,13 +134,48 @@ const authSlice = createSlice({
       })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.loading = false;
-        state.user = action.payload.user;
-        toast.success('Registration successful');
+        // Don't set user in state on registration anymore since email needs verification
+        // Only store the pending registration data if needed
+        state.pendingRegistration = {
+          email: action.payload.user.email,
+          needsVerification: true
+        };
+        toast.success('Registration successful! Please check your email to verify your account.');
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
         toast.error(action.payload?.message || 'Registration failed');
+      })
+      // Verify Email
+      .addCase(verifyEmail.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(verifyEmail.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload.user;
+        state.pendingRegistration = null;
+        toast.success('Email verified successfully!');
+      })
+      .addCase(verifyEmail.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload?.message || 'Verification failed';
+        toast.error('Email verification failed. The link may be invalid or expired.');
+      })
+      // Resend Verification Email
+      .addCase(resendVerificationEmail.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(resendVerificationEmail.fulfilled, (state) => {
+        state.loading = false;
+        toast.success('Verification email sent successfully!');
+      })
+      .addCase(resendVerificationEmail.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload?.message || 'Failed to resend verification email';
+        toast.error('Failed to resend verification email. Please try again later.');
       })
       // Update Profile
       .addCase(updateProfile.pending, (state) => {
@@ -143,5 +203,6 @@ export const selectAuthLoading = (state) => state.auth.loading;
 export const selectAuthError = (state) => state.auth.error;
 export const selectIsAuthenticated = (state) => !!state.auth.user;
 export const selectUserRole = (state) => state.auth.user?.role;
+export const selectPendingRegistration = (state) => state.auth.pendingRegistration;
 
 export default authSlice.reducer;

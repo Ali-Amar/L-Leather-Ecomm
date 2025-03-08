@@ -26,6 +26,7 @@ import Contact from './pages/Contact'
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import ResetPassword from './components/auth/ResetPassword';
+import VerifyEmail from './components/auth/VerifyEmail';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -119,6 +120,7 @@ function App() {
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
             <Route path="reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
             
             {/* 404 Page - Catch all unmatched routes */}
             <Route path="*" element={<NotFound />} />

@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const sendEmail = require('../utils/sendEmail');
+const emailService = require('../services/emailService');
 
 // @desc    Register user
 // @route   POST /api/v1/auth/register
@@ -10,17 +11,63 @@ exports.register = async (req, res, next) => {
   try {
     const { firstName, lastName, email, password, phone } = req.body;
 
-    // Create user
+    // Check if email already exists first
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered. Please use a different email address.'
+      });
+    }
+
+    // Create user with email unverified
     const user = await User.create({
       firstName,
       lastName,
       email,
       password,
-      phone
+      phone,
+      isEmailVerified: false
     });
 
-    sendTokenResponse(user, 201, res);
+    // Generate email verification token
+    const verificationToken = user.getEmailVerificationToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Send verification email
+    try {
+      await emailService.sendEmailVerification(user, verificationToken);
+      
+      // Return success response with limited user info (no token yet)
+      res.status(201).json({
+        success: true,
+        message: 'Registration successful! Please check your email to verify your account.',
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email
+        }
+      });
+    } catch (err) {
+      console.log('Email sending error:', err);
+      user.emailVerificationToken = undefined;
+      user.emailVerificationExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      return next(new ErrorResponse('Email verification could not be sent', 500));
+    }
   } catch (err) {
+    console.log('Registration error:', err);
+    
+    // Handle duplicate key error
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered. Please use a different email address.'
+      });
+    }
+    
     next(err);
   }
 };
@@ -42,6 +89,11 @@ exports.login = async (req, res, next) => {
 
     if (!user) {
       return next(new ErrorResponse('Invalid credentials', 401));
+    }
+
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return next(new ErrorResponse('Please verify your email before logging in', 401));
     }
 
     // Check if password matches
@@ -210,6 +262,82 @@ exports.resetPassword = async (req, res, next) => {
     await user.save();
 
     sendTokenResponse(user, 200, res);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Verify email
+// @route   GET /api/v1/auth/verifyemail/:verificationtoken
+// @access  Public
+exports.verifyEmail = async (req, res, next) => {
+  try {
+    // Get hashed token
+    const emailVerificationToken = crypto
+      .createHash('sha256')
+      .update(req.params.verificationtoken)
+      .digest('hex');
+
+    const user = await User.findOne({
+      emailVerificationToken,
+      emailVerificationExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return next(new ErrorResponse('Invalid or expired token', 400));
+    }
+
+    // Set user as verified
+    user.isEmailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpire = undefined;
+    await user.save();
+
+    // Send token for automatic login
+    sendTokenResponse(user, 200, res);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Resend verification email
+// @route   POST /api/v1/auth/resendverification
+// @access  Public
+exports.resendVerification = async (req, res, next) => {
+  try {
+    const user = await User.findOne({ email: req.body.email });
+
+    if (!user) {
+      return next(new ErrorResponse('There is no user with that email', 404));
+    }
+
+    // If already verified
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already verified'
+      });
+    }
+
+    // Generate new verification token
+    const verificationToken = user.getEmailVerificationToken();
+    await user.save({ validateBeforeSave: false });
+
+    try {
+      await emailService.sendEmailVerification(user, verificationToken);
+
+      res.status(200).json({
+        success: true,
+        message: 'Verification email resent'
+      });
+    } catch (err) {
+      console.log(err);
+      user.emailVerificationToken = undefined;
+      user.emailVerificationExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      return next(new ErrorResponse('Email could not be sent', 500));
+    }
   } catch (err) {
     next(err);
   }

@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Mail, Lock, User, Phone } from 'lucide-react';
-import { registerUser, selectAuthLoading, selectAuthError } from '../../features/auth/authSlice';
+import { 
+  registerUser, 
+  resendVerificationEmail,
+  selectAuthLoading, 
+  selectAuthError 
+} from '../../features/auth/authSlice';
 
 import Button from '../common/Button';
 import Input from '../common/Input';
 
 const Register = () => {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const isLoading = useSelector(selectAuthLoading);
   const authError = useSelector(selectAuthError);
 
@@ -22,6 +26,7 @@ const Register = () => {
     confirmPassword: '',
   });
   const [errors, setErrors] = useState({});
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -84,13 +89,62 @@ const Register = () => {
     
     try {
       const resultAction = await dispatch(registerUser(formData)).unwrap();
-      navigate('/'); // Redirect to home page after successful registration
+      setRegistrationSuccess(true);
+      // Don't navigate away - show verification instructions
     } catch (error) {
+      console.error('Registration error:', error);
+      
+      // Handle error message from API
+      let errorMessage = 'Failed to register. Please try again.';
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
       setErrors({
-        submit: error || 'Failed to register. Please try again.',
+        ...errors,
+        submit: errorMessage
       });
     }
   };
+
+  if (registrationSuccess) {
+    return (
+      <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Check Your Email</h2>
+            <p className="text-gray-600 mb-6">
+              We've sent a verification link to <span className="font-medium">{formData.email}</span>. 
+              Please check your inbox and click the link to activate your account.
+            </p>
+            <div className="text-sm text-gray-500 mb-4">
+              <p>If you don't see the email, check your spam folder or click the button below to resend it.</p>
+            </div>
+            <Button 
+              onClick={() => dispatch(resendVerificationEmail({ email: formData.email }))}
+              fullWidth
+              disabled={isLoading}
+            >
+              {isLoading ? 'Sending...' : 'Resend Verification Email'}
+            </Button>
+            <div className="mt-4">
+              <Link to="/login" className="text-primary hover:underline">
+                Return to login
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center px-4 py-12">

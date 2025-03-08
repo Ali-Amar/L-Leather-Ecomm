@@ -1,4 +1,3 @@
-// services/emailService.js
 const nodemailer = require('nodemailer');
 const ErrorResponse = require('../utils/errorResponse');
 
@@ -43,6 +42,17 @@ class EmailService {
     });
   }
 
+  // Email verification email
+  async sendEmailVerification(user, verificationToken) {
+    const verificationUrl = `${process.env.CLIENT_URL}/verify-email/${verificationToken}`;
+    const html = this.getEmailVerificationTemplate(user.firstName, verificationUrl);
+    await this.sendEmail({
+      email: user.email,
+      subject: 'Verify Your Email - L\'ardene Leather',
+      html
+    });
+  }
+
   // Order confirmation email
   async sendOrderConfirmation(order, user) {
     const html = this.getOrderConfirmationTemplate(order, user);
@@ -65,7 +75,7 @@ class EmailService {
 
   // Password reset email
   async sendPasswordResetEmail(user, resetToken) {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
     const html = this.getPasswordResetTemplate(resetUrl);
     await this.sendEmail({
       email: user.email,
@@ -99,9 +109,27 @@ class EmailService {
           <li>Receive special offers</li>
         </ul>
         <p>Start exploring our collection today!</p>
-        <a href="${process.env.FRONTEND_URL}/shop" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
+        <a href="${process.env.CLIENT_URL}/shop" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">
           Shop Now
         </a>
+      </div>
+    `;
+  }
+
+  // Email template for verification
+  getEmailVerificationTemplate(firstName, verificationUrl) {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Verify Your Email</h2>
+        <p>Dear ${firstName},</p>
+        <p>Thank you for registering with L'ardene Leather. Please verify your email address by clicking the button below:</p>
+        
+        <a href="${verificationUrl}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0;">
+          Verify Email
+        </a>
+
+        <p>If you didn't create an account with us, please ignore this email.</p>
+        <p>This link will expire in 24 hours.</p>
       </div>
     `;
   }
@@ -167,7 +195,7 @@ class EmailService {
         </div>
 
         <p>You can track your order status here:</p>
-        <a href="${process.env.FRONTEND_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+        <a href="${process.env.CLIENT_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
           Track Order
         </a>
       </div>
@@ -191,7 +219,7 @@ class EmailService {
         </div>
 
         <p>View your order details here:</p>
-        <a href="${process.env.FRONTEND_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+        <a href="${process.env.CLIENT_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
           View Order
         </a>
       </div>
@@ -234,7 +262,7 @@ class EmailService {
         </div>
 
         <p>Track your order here:</p>
-        <a href="${process.env.FRONTEND_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+        <a href="${process.env.CLIENT_URL}/orders/${order._id}" style="background-color: #8B4513; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
           Track Order
         </a>
       </div>

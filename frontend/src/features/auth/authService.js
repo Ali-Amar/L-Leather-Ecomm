@@ -3,7 +3,6 @@ import api from '../../utils/api';
 const login = async (userData) => {
   try {
     const response = await api.post('/auth/login', userData);
-    // Log the response to see what we're getting
     console.log('Login Response:', response);
     
     if (response.success && response.token && response.user) {
@@ -21,6 +20,22 @@ const register = async (userData) => {
   try {
     const response = await api.post('/auth/register', userData);
     console.log('Register Response:', response);
+
+    return response;
+  } catch (error) {
+    console.error('Register Error:', error);
+    
+    if (error.response && error.response.data) {
+      throw error.response.data.message || 'Registration failed';
+    }
+    
+    throw error.message || 'Registration failed';
+  }
+};
+
+const verifyEmail = async (token) => {
+  try {
+    const response = await api.get(`/auth/verifyemail/${token}`);
     
     if (response.success && response.token && response.user) {
       localStorage.setItem('token', response.token);
@@ -28,7 +43,17 @@ const register = async (userData) => {
     }
     return response;
   } catch (error) {
-    console.error('Register Error:', error);
+    console.error('Email Verification Error:', error);
+    throw error;
+  }
+};
+
+const resendVerification = async (email) => {
+  try {
+    const response = await api.post('/auth/resendverification', email);
+    return response;
+  } catch (error) {
+    console.error('Resend Verification Error:', error);
     throw error;
   }
 };
@@ -65,7 +90,9 @@ const authService = {
   logout,
   updateProfile,
   resetPassword,
-  deleteAccount
+  deleteAccount,
+  verifyEmail,
+  resendVerification
 };
 
 export default authService;
