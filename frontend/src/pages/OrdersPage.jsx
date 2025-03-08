@@ -17,36 +17,37 @@ const OrdersPage = () => {
       try {
         setLoading(true);
         
-        // Log the token we're using
-        const token = localStorage.getItem('token');
-        console.log('Fetching orders using token:', token ? 'Token exists' : 'No token');
+        // First try direct API call
+        try {
+          console.log('Trying direct API call to /orders/myorders');
+          const response = await api.get('/orders/myorders');
+          console.log('Direct API response:', response);
+          
+          if (response && (response.data || response.success)) {
+            const orderData = response.data?.data || response.data || [];
+            setOrders(orderData);
+            setLoading(false);
+            return;
+          }
+        } catch (directApiError) {
+          console.error('Direct API call failed:', directApiError);
+          // Continue to emergency route fallback
+        }
         
-        // Make direct API call
-        console.log('Fetching orders from /orders/myorders endpoint');
-        const response = await api.get('/orders/myorders');
+        // Fallback to emergency route
+        console.log('Trying emergency route as fallback');
+        const emergencyResponse = await api.get('/emergency-order/myorders');
+        console.log('Emergency route response:', emergencyResponse);
         
-        console.log('Order response:', response);
-        
-        if (response.data && response.data.success) {
-          setOrders(response.data.data || []);
+        if (emergencyResponse && (emergencyResponse.data || emergencyResponse.success)) {
+          const orderData = emergencyResponse.data?.data || emergencyResponse.data || [];
+          setOrders(orderData);
         } else {
-          setError('Failed to fetch orders: ' + (response.data?.message || 'Unknown error'));
+          setError('Failed to fetch orders from both standard and emergency routes');
         }
       } catch (err) {
-        console.error('Error fetching orders:', err);
-        
-        // More detailed error handling
-        if (err.response) {
-          console.error('Error status:', err.response.status);
-          console.error('Error data:', err.response.data);
-          setError(`Error: ${err.response.data?.message || err.response.statusText}`);
-        } else if (err.request) {
-          console.error('No response received:', err.request);
-          setError('No response from server. Please check your connection.');
-        } else {
-          console.error('Request setup error:', err.message);
-          setError(`Error: ${err.message}`);
-        }
+        console.error('All fetch attempts failed:', err);
+        setError(`Error: ${err.message || 'Failed to fetch orders'}`);
       } finally {
         setLoading(false);
       }
