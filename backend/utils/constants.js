@@ -26,7 +26,7 @@ exports.CITIES = Object.values(exports.PAKISTAN_REGIONS).flat();
   // Shipping Configuration
   exports.SHIPPING = {
     FREE_SHIPPING_THRESHOLD: 10000, // Free shipping for orders above 10,000 PKR
-    DEFAULT_SHIPPING_FEE: 500 // Default shipping fee is 500 PKR
+    DEFAULT_SHIPPING_FEE: 229 // Default shipping fee is 500 PKR
   };
   
   // Other necessary constants can be added here later

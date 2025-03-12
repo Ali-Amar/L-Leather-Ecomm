@@ -73,7 +73,7 @@ export const PAKISTAN_REGIONS = {
 // Shipping thresholds
 export const SHIPPING = {
   FREE_SHIPPING_THRESHOLD: 10000,
-  DEFAULT_SHIPPING_FEE: 500
+  DEFAULT_SHIPPING_FEE: 229
 };
 
 // Pagination
