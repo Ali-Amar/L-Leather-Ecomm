@@ -48,9 +48,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Handle Stripe webhook route before body parser
-app.post('/api/v1/payments/webhook', express.raw({type: 'application/json'}));
-
 // Enable CORS first
 app.use(cors({
   origin: 'http://localhost:5173',

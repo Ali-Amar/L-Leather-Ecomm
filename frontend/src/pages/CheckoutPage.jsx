@@ -14,7 +14,6 @@ import {
 } from '../features/orders/orderSlice';
 import CheckoutForm from '../components/checkout/CheckoutForm';
 import Button from '../components/common/Button';
-import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 const CheckoutPage = () => {
@@ -44,7 +43,7 @@ const CheckoutPage = () => {
     }
   }, [invalidItems, navigate]);
   
-  // Replace your entire handleCheckout function with this simpler version
+  // Handle checkout with COD only
   const handleCheckout = (orderData) => {
     // Set processing state
     setIsProcessing(true);
@@ -60,13 +59,13 @@ const CheckoutPage = () => {
         image: item.image
       })),
       shippingAddress: orderData.shippingAddress,
-      paymentMethod: orderData.paymentMethod,
+      paymentMethod: 'cod', // Always COD
       subtotal: cartTotal,
       shippingFee: orderData.shippingFee,
       total: cartTotal + orderData.shippingFee
     };
     
-    // Use the CORRECT backend URL with port 5000, not 5173
+    // Use the emergency order endpoint
     fetch('http://localhost:5000/api/v1/emergency-order', {
       method: 'POST',
       headers: {
@@ -158,7 +157,7 @@ const CheckoutPage = () => {
             Secure Checkout
           </h3>
           <p className="text-gray-500 text-sm">
-            Your payment information is processed securely. We do not store credit card details.
+            Your order information is processed securely.
           </p>
         </div>
       </div>
