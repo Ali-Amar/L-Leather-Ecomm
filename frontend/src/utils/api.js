@@ -1,10 +1,29 @@
-// Updated api.js with better error handling and clearer logging
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+const getBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  console.log('Environment API URL:', envUrl);
+  
+  if (envUrl) {
+    return envUrl;
+  }
+  
+  // Fallback for development
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:5000/api/v1';
+  }
+  
+  // Safe production fallback
+  return 'https://api.lardeneleather.com/api/v1';
+};
+
+const baseURL = getBaseUrl();
+console.log('Using API baseURL:', baseURL);
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1',
-  timeout: 60000, // Extended timeout (60 seconds)
+  baseURL,
+  timeout: 30000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'

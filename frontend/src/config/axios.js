@@ -1,9 +1,26 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+// Define the API base URL with clearer fallback
+const getBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  
+  if (envUrl) {
+    return envUrl;
+  }
+  
+  // Fallback for development
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:5000/api/v1';
+  }
+  
+  // Safe production fallback
+  return 'https://api.lardeneleather.com/api/v1';
+};
+
 // Create an axios instance with custom config
 const instance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: getBaseUrl(),
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
